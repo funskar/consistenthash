@@ -68,8 +68,8 @@ func NewRing(fn Hash) *HashRing {
 }
 
 func (h *HashRing) AddNode(key string, weight int) error {
-	h.RWMutex.Lock()
-	defer h.RWMutex.Unlock()
+	h.Lock()
+	defer h.Unlock()
 	if _, exists := h.members[key]; exists {
 		return fmt.Errorf("key with name %s already exists", key)
 	}
@@ -97,6 +97,8 @@ func (h *HashRing) Get(key string) (string, error) {
 }
 
 func (h *HashRing) DeleteNode(key string) error {
+	h.Lock()
+	defer h.Unlock()
 	if _, exists := h.members[key]; !exists {
 		return fmt.Errorf("key with name %s not found", key)
 	}
