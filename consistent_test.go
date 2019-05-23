@@ -57,7 +57,7 @@ func TestHashRing_AddNode(t *testing.T) {
 		h.AddNode(node.Key, node.Weight)
 		count += node.Weight
 	}
-	checkCount(len(h.sortedNodeHashes), count, t)
+	checkCount(len(h.sortedHashes), count, t)
 }
 
 func TestHashRing_IsEmpty(t *testing.T) {
@@ -84,5 +84,23 @@ func TestHashRing_Get(t *testing.T) {
 		if node != req.expNode {
 			t.Errorf("Request for %s, yielded node %s, but expected node %s", req.Key, node, req.expNode)
 		}
+	}
+}
+
+func TestHashRing_DeleteNode(t *testing.T) {
+	h := NewRing(hashFunction)
+	count := 0
+	for _, node := range nodes {
+		h.AddNode(node.Key, node.Weight)
+		count += node.Weight
+	}
+	h.DeleteNode(nodes[0].Key)
+	checkCount(len(h.sortedHashes), count-nodes[0].Weight, t)
+	key, err := h.Get(requests[1].Key)
+	if err != nil {
+		panic(err)
+	}
+	if key != "4" {
+		t.Errorf("Request for %s, yielded node %s, but expected node %s", requests[1].Key, key, "4")
 	}
 }

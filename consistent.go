@@ -21,23 +21,45 @@ func (u uints) Less(i, j int) bool { return u[i] < u[j] }
 
 type Hash func(data []byte) uint32
 
+type entry interface {
+	GetWeight() int
+	GetKey() string
+}
+
+type node struct {
+	weight int
+	key    string
+}
+
+func (e *node) GetWeight() int {
+	return e.weight
+}
+
+func (e *node) GetKey() string {
+	return e.key
+}
+
+type StringValue struct {
+	value string
+}
+
 type HashRing struct {
-	hash             Hash
-	sortedNodeHashes uints
-	nodeHashMap      map[uint32]string
-	members          map[string]bool
+	hash         Hash
+	sortedHashes uints
+	nodeHashMap  map[uint32]string
+	members      map[string]entry
 	sync.RWMutex
 }
 
 func (h *HashRing) IsEmpty() bool {
-	return len(h.sortedNodeHashes) == 0
+	return len(h.sortedHashes) == 0
 }
 
 func NewRing(fn Hash) *HashRing {
 	h := &HashRing{
 		hash:        fn,
 		nodeHashMap: make(map[uint32]string),
-		members:     make(map[string]bool),
+		members:     make(map[string]entry),
 	}
 	if h.hash == nil {
 		h.hash = crc32.ChecksumIEEE
@@ -45,18 +67,19 @@ func NewRing(fn Hash) *HashRing {
 	return h
 }
 
-func (h *HashRing) AddNode(node string, weight int) error {
+func (h *HashRing) AddNode(key string, weight int) error {
 	h.RWMutex.Lock()
 	defer h.RWMutex.Unlock()
-	if _, exists := h.members[node]; exists {
-		return fmt.Errorf("node with name %s already exists", node)
+	if _, exists := h.members[key]; exists {
+		return fmt.Errorf("key with name %s already exists", key)
 	}
+	h.members[key] = &node{weight, key}
 	for i := 0; i < weight; i++ {
-		hashKey := h.hashKey(i, node)
-		h.sortedNodeHashes = append(h.sortedNodeHashes, hashKey)
-		h.nodeHashMap[hashKey] = node
+		hashKey := h.hashKey(i, key)
+		h.sortedHashes = append(h.sortedHashes, hashKey)
+		h.nodeHashMap[hashKey] = key
 	}
-	sort.Sort(h.sortedNodeHashes)
+	sort.Sort(h.sortedHashes)
 	return nil
 }
 
@@ -69,28 +92,39 @@ func (h *HashRing) Get(key string) (string, error) {
 	h.RLock()
 	defer h.RUnlock()
 	reqHash := h.hash([]byte(key))
-	nodeHash := h.search(reqHash)
-	return h.nodeHashMap[nodeHash], nil
+	index := h.search(reqHash)
+	return h.nodeHashMap[h.sortedHashes[index]], nil
 }
 
-func (h *HashRing) DeleteNode(node string) error {
-	if _, exists := h.members[node]; !exists {
-		return fmt.Errorf("node with name %s not found", node)
+func (h *HashRing) DeleteNode(key string) error {
+	if _, exists := h.members[key]; !exists {
+		return fmt.Errorf("key with name %s not found", key)
 	}
-	//TODO: code for node deletion
+	for i := 0; i < h.members[key].GetWeight(); i++ {
+		hashKey := h.hashKey(i, key)
+		delete(h.nodeHashMap, hashKey)
+		index := h.search(hashKey)
+		h.sortedHashes = removeIndex(h.sortedHashes, index)
+	}
+	sort.Sort(h.sortedHashes)
+	delete(h.members, key)
 	return nil
 }
 
-func (h *HashRing) search(reqHash uint32) uint32 {
+func removeIndex(slice uints, i int) uints {
+	return append(slice[:i], slice[i+1:]...)
+}
+
+func (h *HashRing) search(reqHash uint32) int {
 	//Binary search for nearest node after the hash of current request
 	fn := func(mid int) bool {
-		return h.sortedNodeHashes[mid] >= reqHash
+		return h.sortedHashes[mid] >= reqHash
 	}
-	hashKey := sort.Search(len(h.sortedNodeHashes), fn)
+	nodeIndex := sort.Search(len(h.sortedHashes), fn)
 
 	// Means we have cycled back to the first replica
-	if hashKey == len(h.sortedNodeHashes) {
-		hashKey = 0
+	if nodeIndex == len(h.sortedHashes) {
+		nodeIndex = 0
 	}
-	return h.sortedNodeHashes[hashKey]
+	return nodeIndex
 }
