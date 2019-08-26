@@ -119,8 +119,9 @@ func removeIndex(slice uints, i int) uints {
 
 func (h *HashRing) search(reqHash uint32) int {
 	//Binary search for nearest node after the hash of current request
-	fn := func(mid int) bool {
-		return h.sortedHashes[mid] >= reqHash
+	//Search returns the smallest value of i for which fn(predicate) is true
+	fn := func(i int) bool {
+		return h.sortedHashes[i] >= reqHash
 	}
 	nodeIndex := sort.Search(len(h.sortedHashes), fn)
 
