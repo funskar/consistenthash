@@ -83,9 +83,9 @@ func (h *HashRing) AddNode(key string, weight int) error {
 	return nil
 }
 
-func (h *HashRing) hashKey(i int, node string) uint32 {
-	strKey := []byte(strconv.Itoa(i) + node)
-	return h.hash(strKey)
+func (h *HashRing) hashKey(i int, key string) uint32 {
+	aggrKey := []byte(strconv.Itoa(i) + key)
+	return h.hash(aggrKey)
 }
 
 func (h *HashRing) Get(key string) (string, error) {
